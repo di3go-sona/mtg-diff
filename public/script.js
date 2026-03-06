@@ -146,6 +146,14 @@ function calculateDiff() {
     if (!addHTML) addHTML = '<div class="text-gray-400 italic">No cards added</div>';
     addContainer.innerHTML = addHTML;
 
+    // Show/hide print button
+    const printBtn = document.getElementById('print-btn');
+    if (mainDiff.adds.length > 0 || sideDiff.adds.length > 0) {
+        if(printBtn) printBtn.classList.remove('hidden');
+    } else {
+        if(printBtn) printBtn.classList.add('hidden');
+    }
+
     // Update stats
     document.getElementById('stat-main-cuts').textContent = mainDiff.cuts.reduce((a,b) => a + b.count, 0);
     document.getElementById('stat-main-adds').textContent = mainDiff.adds.reduce((a,b) => a + b.count, 0);
@@ -154,6 +162,127 @@ function calculateDiff() {
 
     document.getElementById('results').classList.remove('hidden');
     document.getElementById('stats').classList.remove('hidden');
+}
+
+function printAddedCards() {
+    const deck1Text = document.getElementById('deck1').value;
+    const deck2Text = document.getElementById('deck2').value;
+
+    const d1 = parseDeck(deck1Text);
+    const d2 = parseDeck(deck2Text);
+
+    // Re-calculate basic diff to get added cards
+    const mainDiff = getDiff(d1.main, d2.main);
+    const sideDiff = getDiff(d1.side, d2.side);
+    
+    let allCards = [];
+    
+    // Add Mainboard Adds
+    mainDiff.adds.forEach(item => {
+        for(let i=0; i < item.count; i++) allCards.push(item.name);
+    });
+    
+    // Add Sideboard Adds
+    sideDiff.adds.forEach(item => {
+        for(let i=0; i < item.count; i++) allCards.push(item.name);
+    });
+
+    if (allCards.length === 0) {
+        alert("No added cards to print!");
+        return;
+    }
+
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Print Proxies (${allCards.length} cards)</title>
+            <style>
+                @page { margin: 1cm; size: auto; }
+                body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f0f0f0; }
+                
+                .controls { 
+                    background: white; 
+                    padding: 20px; 
+                    border-radius: 8px; 
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+                    margin-bottom: 2rem; 
+                    text-align: center;
+                    max-width: 600px;
+                    margin-left: auto;
+                    margin-right: auto; 
+                }
+                
+                .grid { 
+                    display: grid; 
+                    grid-template-columns: repeat(3, 1fr); 
+                    gap: 0; 
+                    width: 100%; 
+                    max-width: 190mm; /* Close to printable width on A4/Letter */
+                    margin: 0 auto; 
+                    background: white;
+                }
+                
+                .card-container { 
+                    position: relative; 
+                    width: 100%; 
+                    /* 63mm / 88mm ratio is roughly 0.715. Padding bottom is inverse aspect ratio ~140% */
+                    padding-bottom: 139.6%; 
+                    overflow: hidden; 
+                    background: #eee;
+                    border: 0.5px dashed #ddd; /* Light guide for cutting */
+                    box-sizing: border-box;
+                }
+                
+                .card-container img { 
+                    position: absolute; 
+                    top: 0; 
+                    left: 0; 
+                    width: 100%; 
+                    height: 100%; 
+                    object-fit: cover; 
+                }
+
+                @media print {
+                    @page { margin: 0.5cm; }
+                    body { background: white; padding: 0; }
+                    .controls { display: none; }
+                    .grid { max-width: 100%; width: 100%; }
+                    .card-container { border: 1px dashed #ccc; } /* Keep dash lines for cutting guides */
+                }
+            </style>
+        </head>
+        <body>
+            <div class="controls">
+                <h2 style="margin-top:0">Print Proxies</h2>
+                <p>Generating ${allCards.length} cards. Images calculate layout for A4/Letter paper (3x3 grid).</p>
+                <div style="margin-top: 15px;">
+                    <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px;">Print Now</button>
+                    <button onclick="window.close()" style="background: #e5e7eb; color: #374151; border: none; padding: 10px 20px; border-radius: 6px; margin-left: 10px; cursor: pointer;">Close</button>
+                </div>
+            </div>
+            
+            <div class="grid">
+                ${allCards.map(name => {
+                    const safeName = encodeURIComponent(name);
+                    return `<div class="card-container">
+                        <img src="https://api.scryfall.com/cards/named?exact=${safeName}&format=image" 
+                             alt="${name}" 
+                             loading="eager"
+                             onerror="this.parentElement.innerHTML='<div style=\\'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-size:12px\\'>Image not found:<br><strong>${name}</strong></div>'">
+                    </div>`;
+                }).join('')}
+            </div>
+        </body>
+        </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+        alert("Please allow popups to print proxies.");
+    }
 }
 
 // Tooltip logic
