@@ -41,17 +41,17 @@
             <!-- Source Deck -->
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">Original Deck (Source)</h2>
-                <div id="deck1" contenteditable="true" 
-                     class="deck-input w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" 
-                     onblur="formatDeck(this)" onpaste="handlePaste(event)"></div>
+                <textarea id="deck1" class="w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400" 
+                    placeholder="Paste original decklist..." oninput="updatePreview('deck1', 'preview1')"></textarea>
+                <div id="preview1" class="mt-4 p-4 border border-gray-200 rounded bg-gray-50 h-64 overflow-y-auto font-mono text-sm empty:hidden"></div>
             </div>
 
             <!-- Target Deck -->
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">New Deck (Target)</h2>
-                <div id="deck2" contenteditable="true" 
-                     class="deck-input w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" 
-                     onblur="formatDeck(this)" onpaste="handlePaste(event)"></div>
+                <textarea id="deck2" class="w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400" 
+                    placeholder="Paste new decklist..." oninput="updatePreview('deck2', 'preview2')"></textarea>
+                <div id="preview2" class="mt-4 p-4 border border-gray-200 rounded bg-gray-50 h-64 overflow-y-auto font-mono text-sm empty:hidden"></div>
             </div>
         </div>
 
@@ -85,35 +85,42 @@
     </div>
 
     <script>
-        function handlePaste(e) {
-            e.preventDefault();
-            const text = (e.originalEvent || e).clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-        }
-
-        function formatDeck(element) {
-            const text = element.innerText;
-            if (!text.trim()) return;
+        function updatePreview(inputId, previewId) {
+            const input = document.getElementById(inputId);
+            const preview = document.getElementById(previewId);
+            const text = input.value;
+            
+            if (!text.trim()) {
+                preview.innerHTML = '';
+                preview.classList.add('hidden');
+                return;
+            }
+            
+            preview.classList.remove('hidden');
 
             const lines = text.split('\n');
             const formattedHTML = lines.map(line => {
+                line = line.trim();
                 const match = line.match(/^(\d+)\s+(.+?)(?:\s+\(|$)/);
                 if (match) {
                      const name = match[2];
                      const safeName = name.replace(/"/g, '&quot;');
-                     const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                     const lineContent = line.replace(new RegExp(`^(\\d+\\s+)(${escapedName})`), 
-                        `$1<span class="card-hover text-blue-600 font-medium" data-name="${safeName}">$2</span>`);
-                     return `<div>${lineContent}</div>`;
+                     
+                     // Simply reconstruct the line with the linked name
+                     // Using regex match parts to rebuild clean string
+                     return `<div>${match[1]} <span class="card-hover text-blue-600 font-medium" data-name="${safeName}">${name}</span> ${line.substring(match[0].length).trim() ? '...' : ''}</div>`;
                 }
-                if (line.trim().toUpperCase().startsWith('SIDEBOARD:')) {
+                
+                if (line.toUpperCase().startsWith('SIDEBOARD:')) {
                     return `<div class="font-bold text-gray-500 mt-2">${line}</div>`;
                 }
-                if (!line.trim()) return '<div><br></div>';
-                return `<div>${line}</div>`;
+                
+                // For other lines, just print them if they have content
+                if (line) return `<div>${line}</div>`;
+                return '';
             }).join('');
             
-            element.innerHTML = formattedHTML;
+            preview.innerHTML = formattedHTML;
         }
 
         function parseDeck(text) {
@@ -176,8 +183,12 @@
         }
 
         function calculateDiff() {
-            const deck1Text = document.getElementById('deck1').innerText;
-            const deck2Text = document.getElementById('deck2').innerText;
+            const deck1Text = document.getElementById('deck1').value;
+            const deck2Text = document.getElementById('deck2').value;
+
+            // Ensure previews are up to date
+            updatePreview('deck1', 'preview1');
+            updatePreview('deck2', 'preview2');
 
             const d1 = parseDeck(deck1Text);
             const d2 = parseDeck(deck2Text);
