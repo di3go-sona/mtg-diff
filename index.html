@@ -90,6 +90,9 @@
             const preview = document.getElementById(previewId);
             const text = input.value;
             
+            // Save to localStorage
+            localStorage.setItem(inputId, text);
+            
             if (!text.trim()) {
                 preview.innerHTML = '';
                 preview.classList.add('hidden');
@@ -283,6 +286,21 @@
                 tooltip.style.display = 'none';
                 currentCardName = null;
                 tooltip.src = '';
+            }
+        });
+
+        // Initialize from localStorage
+        window.addEventListener('load', () => {
+            const d1 = localStorage.getItem('deck1');
+            if (d1) {
+                document.getElementById('deck1').value = d1;
+                updatePreview('deck1', 'preview1');
+            }
+            
+            const d2 = localStorage.getItem('deck2');
+            if (d2) {
+                document.getElementById('deck2').value = d2;
+                updatePreview('deck2', 'preview2');
             }
         });
     </script>
