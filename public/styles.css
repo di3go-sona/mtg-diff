@@ -1,0 +1,24 @@
+.card-add { color: #16a34a; }
+.card-remove { color: #dc2626; }
+.card-move { color: #d97706; }
+
+.card-hover {
+    cursor: pointer;
+    border-bottom: 1px dotted currentColor;
+}
+
+#card-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 50;
+    width: 240px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.deck-input {
+    overflow-y: auto;
+    white-space: pre;
+}

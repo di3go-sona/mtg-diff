@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Deck Diff</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <img id="card-tooltip" src="" alt="Card Tooltip">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">MTG Decklist Diff Tool</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- Source Deck -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Original Deck (Source)</h2>
+                <textarea id="deck1" class="w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400" 
+                    placeholder="Paste original decklist..." oninput="updatePreview('deck1', 'preview1')"></textarea>
+                <div id="preview1" class="mt-4 p-4 border border-gray-200 rounded bg-gray-50 h-64 overflow-y-auto font-mono text-sm empty:hidden"></div>
+            </div>
+
+            <!-- Target Deck -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">New Deck (Target)</h2>
+                <textarea id="deck2" class="w-full h-96 p-4 border border-gray-300 rounded font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400" 
+                    placeholder="Paste new decklist..." oninput="updatePreview('deck2', 'preview2')"></textarea>
+                <div id="preview2" class="mt-4 p-4 border border-gray-200 rounded bg-gray-50 h-64 overflow-y-auto font-mono text-sm empty:hidden"></div>
+            </div>
+        </div>
+
+        <div class="flex justify-center mb-8">
+            <button onclick="calculateDiff()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow transition-colors">
+                Compare Decks
+            </button>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-bold mb-4 text-red-600 border-b pb-2">Cards to Remove (-)</h3>
+                <div id="diff-remove" class="font-mono text-sm space-y-1"></div>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-bold mb-4 text-green-600 border-b pb-2">Cards to Add (+)</h3>
+                <div id="diff-add" class="font-mono text-sm space-y-1"></div>
+            </div>
+        </div>
+
+        <div id="stats" class="hidden mt-8 bg-white p-6 rounded-lg shadow-md">
+             <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Changes Summary</h3>
+             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div><span class="font-semibold">Mainboard Cuts:</span> <span id="stat-main-cuts">0</span></div>
+                <div><span class="font-semibold">Mainboard Adds:</span> <span id="stat-main-adds">0</span></div>
+                <div><span class="font-semibold">Sideboard Cuts:</span> <span id="stat-side-cuts">0</span></div>
+                <div><span class="font-semibold">Sideboard Adds:</span> <span id="stat-side-adds">0</span></div>
+             </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
