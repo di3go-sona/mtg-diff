@@ -1,3 +1,119 @@
+// Mana symbol helpers
+const cardDataCache = {};
+let fetchQueue = new Set();
+let fetchTimeout = null;
+
+function getManaHtml(manaCost) {
+    if (!manaCost) return '';
+    return manaCost.replace(/{([^}]+)}/g, (match, symbol) => {
+        // Special case for split symbols like {R/G} -> R-G
+        let cleanSymbol = symbol.replace('/', '-').toUpperCase();
+        // Handle "T" as Tap symbol if it appears in cost (unlikely but safe)
+        if (cleanSymbol === 'T') cleanSymbol = 'T';
+        // Handle Phyrexian Mana {R/P} -> RP.svg or R-P.svg? Scryfall uses R-P.
+        cleanSymbol = cleanSymbol.replace('/', '-'); 
+        
+        return `<img src="https://svgs.scryfall.io/card-symbols/${cleanSymbol}.svg" class="w-3 h-3 inline-block mx-[1px]" alt="${symbol}">`;
+    });
+}
+
+function updateManaSymbolsInContainers(containers) {
+    containers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        const placeholders = container.querySelectorAll('.mana-placeholder');
+        placeholders.forEach(span => {
+            const name = span.getAttribute('data-name');
+            if (cardDataCache[name] !== undefined) {
+                span.innerHTML = getManaHtml(cardDataCache[name]);
+                span.classList.remove('mana-placeholder');
+                span.classList.add('mana-rendered');
+            }
+        });
+    });
+}
+
+async function fetchManaData(cardNames, containers) {
+    // Filter need-to-fetch
+    const toFetch = cardNames.filter(name => !cardDataCache[name] && cardDataCache[name] !== '');
+
+    if(toFetch.length === 0) {
+        // All cached
+        updateManaSymbolsInContainers(containers);
+        return;
+    }
+
+    // Process in batches of 75
+    const chunks = [];
+    for (let i = 0; i < toFetch.length; i += 75) {
+        chunks.push(toFetch.slice(i, i + 75));
+    }
+
+    for (const chunk of chunks) {
+        try {
+            const response = await fetch('https://api.scryfall.com/cards/collection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    identifiers: chunk.map(name => ({ name })) 
+                })
+            });
+            const data = await response.json();
+            
+            if (data.data) {
+                data.data.forEach(card => {
+                    // Handle split cards or normal cards
+                    let mana = card.mana_cost;
+                    if (!mana && card.card_faces && card.card_faces.length > 0) {
+                        mana = card.card_faces[0].mana_cost;
+                        // optionally join faces: 
+                        // mana = card.card_faces.map(f => f.mana_cost).join(' // ');
+                    }
+                    cardDataCache[card.name] = mana || '';
+                });
+            }
+            // Mark not founds as empty string to prevent refetch
+            if (data.not_found) {
+                data.not_found.forEach(item => {
+                    cardDataCache[item.name] = '';
+                });
+            }
+        } catch (e) {
+            console.error("Failed to fetch mana costs", e);
+        }
+    }
+    
+    updateManaSymbolsInContainers(containers);
+}
+
+function queueManaFetch(containerIds) {
+    // Collect all unique names from these containers
+    const names = new Set();
+    containerIds.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            container.querySelectorAll('.mana-placeholder').forEach(el => {
+                names.add(el.getAttribute('data-name'));
+            });
+        }
+    });
+
+    if (names.size === 0) return;
+
+    if (fetchTimeout) clearTimeout(fetchTimeout);
+    
+    // Add to global queue
+    names.forEach(n => fetchQueue.add(n));
+
+    // Debounce execution
+    fetchTimeout = setTimeout(() => {
+        const batch = Array.from(fetchQueue);
+        fetchQueue.clear();
+        fetchManaData(batch, containerIds);
+    }, 500); // Wait 500ms after last input
+}
+
 function updatePreview(inputId, previewId) {
     const input = document.getElementById(inputId);
     const preview = document.getElementById(previewId);
@@ -22,8 +138,20 @@ function updatePreview(inputId, previewId) {
              const name = match[2];
              const safeName = name.replace(/"/g, '&quot;');
              
-             // Simply reconstruct the line with the linked name
-             return `<div>${match[1]} <span class="card-hover text-blue-600 font-medium" data-name="${safeName}">${name}</span> ${line.substring(match[0].length).trim() ? '...' : ''}</div>`;
+             // Check cache for immediate render
+             let manaHtml = '';
+             let placeholderClass = 'mana-placeholder';
+             
+             if (cardDataCache[name]) {
+                 manaHtml = getManaHtml(cardDataCache[name]);
+                 placeholderClass = 'mana-rendered';
+             }
+
+             return `<div>
+                ${match[1]} <span class="card-hover text-blue-600 font-medium" data-name="${safeName}">${name}</span> 
+                <span class="${placeholderClass} ml-1 inline-flex items-center" data-name="${safeName}">${manaHtml}</span>
+                ${line.substring(match[0].length).trim() ? '...' : ''}
+             </div>`;
         }
         
         if (line.toUpperCase().startsWith('SIDEBOARD:')) {
@@ -36,6 +164,9 @@ function updatePreview(inputId, previewId) {
     }).join('');
     
     preview.innerHTML = formattedHTML;
+
+    // Trigger fetch for any placeholders
+    queueManaFetch(['preview1', 'preview2']);
 }
 
 function parseDeck(text) {
@@ -91,8 +222,19 @@ function getDiff(source, target) {
 function renderCard(item, type) {
     const className = type === 'add' ? 'card-add' : 'card-remove';
     const safeName = item.name.replace(/"/g, '&quot;');
-    return `<div class="${className} ml-4">
-        ${item.count} <span class="card-hover border-b border-dotted hover:text-blue-600" data-name="${safeName}">${item.name}</span>
+    
+    // Check cache for immediate render
+    let manaHtml = '';
+    let placeholderClass = 'mana-placeholder';
+    
+    if (cardDataCache[item.name]) {
+        manaHtml = getManaHtml(cardDataCache[item.name]);
+        placeholderClass = 'mana-rendered';
+    }
+
+    return `<div class="${className} ml-4 flex items-center">
+        ${item.count} <span class="card-hover border-b border-dotted hover:text-blue-600 mx-1" data-name="${safeName}">${item.name}</span>
+        <span class="${placeholderClass} inline-flex items-center" data-name="${safeName}">${manaHtml}</span>
     </div>`;
 }
 
@@ -162,6 +304,11 @@ function calculateDiff() {
 
     document.getElementById('results').classList.remove('hidden');
     document.getElementById('stats').classList.remove('hidden');
+
+    // Fetch and render mana for results
+    // We can't rely only on the debounced preview fetch because results might contain removed cards not in current inputs?
+    // Actually results are subsets of inputs so fetchQueue logic handles it if we call it.
+    queueManaFetch(['diff-remove', 'diff-add']);
 }
 
 function printAddedCards() {
@@ -192,6 +339,7 @@ function printAddedCards() {
         return;
     }
 
+    // Use Blob URL instead of document.write
     const htmlContent = `
         <!DOCTYPE html>
         <html>
