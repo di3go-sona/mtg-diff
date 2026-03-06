@@ -340,13 +340,20 @@ function printAddedCards() {
     }
 
     // Use Blob URL instead of document.write
+    // Chunk cards into groups of 9 (3x3 grid)
+    const chunkSize = 9;
+    const chunks = [];
+    for (let i = 0; i < allCards.length; i += chunkSize) {
+        chunks.push(allCards.slice(i, i + chunkSize));
+    }
+
     const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
             <title>Print Proxies (${allCards.length} cards)</title>
             <style>
-                @page { margin: 1cm; size: auto; }
+                @page { margin: 0; size: auto; }
                 body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f0f0f0; }
                 
                 .controls { 
@@ -361,14 +368,26 @@ function printAddedCards() {
                     margin-right: auto; 
                 }
                 
+                .page {
+                    width: 100%;
+                    max-width: 190mm; /* Fit within standard print margins */
+                    margin: 0 auto;
+                    background: white;
+                    page-break-after: always;
+                    break-after: page;
+                    padding-top: 10mm; /* Top margin simulation */
+                }
+
+                .page:last-child {
+                    page-break-after: auto;
+                    break-after: auto;
+                }
+                
                 .grid { 
                     display: grid; 
                     grid-template-columns: repeat(3, 1fr); 
                     gap: 0; 
-                    width: 100%; 
-                    max-width: 190mm; /* Close to printable width on A4/Letter */
-                    margin: 0 auto; 
-                    background: white;
+                    width: 100%;
                 }
                 
                 .card-container { 
@@ -380,6 +399,7 @@ function printAddedCards() {
                     background: #eee;
                     border: 0.5px dashed #ddd; /* Light guide for cutting */
                     box-sizing: border-box;
+                    break-inside: avoid;
                 }
                 
                 .card-container img { 
@@ -390,13 +410,18 @@ function printAddedCards() {
                     height: 100%; 
                     object-fit: cover; 
                 }
-
+                
                 @media print {
-                    @page { margin: 0.5cm; }
-                    body { background: white; padding: 0; }
+                    @page { margin: 0; } /* Reset page margin and handle it in .page container */
+                    body { background: white; padding: 0; margin: 0; }
                     .controls { display: none; }
-                    .grid { max-width: 100%; width: 100%; }
-                    .card-container { border: 1px dashed #ccc; } /* Keep dash lines for cutting guides */
+                    .page { 
+                        box-shadow: none; 
+                        margin: 0 auto; 
+                        /* Ensure full height usage to force break correctly */
+                        min-height: 100vh; 
+                    }
+                    .card-container { border: 1px dashed #ccc; } 
                 }
             </style>
         </head>
@@ -410,17 +435,21 @@ function printAddedCards() {
                 </div>
             </div>
             
-            <div class="grid">
-                ${allCards.map(name => {
-                    const safeName = encodeURIComponent(name);
-                    return `<div class="card-container">
-                        <img src="https://api.scryfall.com/cards/named?exact=${safeName}&format=image" 
-                             alt="${name}" 
-                             loading="eager"
-                             onerror="this.parentElement.innerHTML='<div style=\\'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-size:12px\\'>Image not found:<br><strong>${name}</strong></div>'">
-                    </div>`;
-                }).join('')}
-            </div>
+            ${chunks.map(chunk => `
+                <div class="page">
+                    <div class="grid">
+                        ${chunk.map(name => {
+                            const safeName = encodeURIComponent(name);
+                            return `<div class="card-container">
+                                <img src="https://api.scryfall.com/cards/named?exact=${safeName}&format=image" 
+                                     alt="${name}" 
+                                     loading="eager"
+                                     onerror="this.parentElement.innerHTML='<div style=\\'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-size:12px\\'>Image not found:<br><strong>${name}</strong></div>'">
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            `).join('')}
         </body>
         </html>
     `;
