@@ -1,5 +1,7 @@
 // Mana symbol helpers
 const cardDataCache = {};
+const cardTypeCache = {};
+let lastDiffResult = null;
 let fetchQueue = new Set();
 let fetchTimeout = null;
 
@@ -67,16 +69,22 @@ async function fetchManaData(cardNames, containers) {
                     let mana = card.mana_cost;
                     if (!mana && card.card_faces && card.card_faces.length > 0) {
                         mana = card.card_faces[0].mana_cost;
-                        // optionally join faces: 
-                        // mana = card.card_faces.map(f => f.mana_cost).join(' // ');
                     }
                     cardDataCache[card.name] = mana || '';
+
+                    // Capture Type Line
+                    let type = card.type_line;
+                    if (!type && card.card_faces && card.card_faces.length > 0) {
+                        type = card.card_faces[0].type_line;
+                    }
+                    cardTypeCache[card.name] = type || '';
                 });
             }
             // Mark not founds as empty string to prevent refetch
             if (data.not_found) {
                 data.not_found.forEach(item => {
                     cardDataCache[item.name] = '';
+                    cardTypeCache[item.name] = '';
                 });
             }
         } catch (e) {
@@ -85,6 +93,7 @@ async function fetchManaData(cardNames, containers) {
     }
     
     updateManaSymbolsInContainers(containers);
+    updateTypeStatsDisplay();
 }
 
 function queueManaFetch(containerIds) {
@@ -252,6 +261,10 @@ function calculateDiff() {
     const mainDiff = getDiff(d1.main, d2.main);
     const sideDiff = getDiff(d1.side, d2.side);
 
+    // Save for stats
+    lastDiffResult = { mainDiff, sideDiff };
+    updateTypeStatsDisplay();
+
     const removeContainer = document.getElementById('diff-remove');
     const addContainer = document.getElementById('diff-add');
 
@@ -311,6 +324,186 @@ function calculateDiff() {
     queueManaFetch(['diff-remove', 'diff-add']);
 }
 
+function updateTypeStatsDisplay() {
+    if (!lastDiffResult) return;
+    
+    const { mainDiff } = lastDiffResult;
+    // Only processing Mainboard stats for clarity
+    
+    // Priority-based type detection
+    const getType = (typeLine) => {
+        if (typeLine === undefined) return 'Unknown'; 
+        if (!typeLine) return 'Other';
+        if (typeLine.includes('Land')) return 'Land';
+        if (typeLine.includes('Creature')) return 'Creature';
+        if (typeLine.includes('Planeswalker')) return 'Planeswalker';
+        if (typeLine.includes('Instant')) return 'Instant';
+        if (typeLine.includes('Sorcery')) return 'Sorcery';
+        if (typeLine.includes('Enchantment')) return 'Enchantment'; 
+        if (typeLine.includes('Artifact')) return 'Artifact'; 
+        if (typeLine.includes('Battle')) return 'Battle';
+        return 'Other';
+    };
+
+    const stats = {};
+    const initStat = (t) => { if (!stats[t]) stats[t] = { add: 0, cut: 0 }; };
+
+    mainDiff.cuts.forEach(item => {
+        const t = getType(cardTypeCache[item.name]);
+        initStat(t);
+        stats[t].cut += item.count;
+    });
+    
+    mainDiff.adds.forEach(item => {
+        const t = getType(cardTypeCache[item.name]);
+        initStat(t);
+        stats[t].add += item.count;
+    });
+    
+    const container = document.getElementById('type-stats-grid');
+    const wrapper = document.getElementById('type-stats-container');
+    if (!container || !wrapper) return;
+    
+    let html = '';
+    const sortedTypes = Object.keys(stats).sort(); // Alphabetical is fine, or custom order
+    
+    // Custom sort order
+    const order = ['Land', 'Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Battle', 'Other', 'Unknown'];
+    sortedTypes.sort((a,b) => order.indexOf(a) - order.indexOf(b));
+
+    for (const type of sortedTypes) {
+        if (type === 'Unknown') continue; 
+        
+        const data = stats[type];
+        if (data.add === 0 && data.cut === 0) continue;
+        
+        const change = data.add - data.cut;
+        let colorClass = 'text-gray-500';
+        let sign = '';
+        if (change > 0) { colorClass = 'text-green-600 font-bold'; sign = '+'; }
+        if (change < 0) { colorClass = 'text-red-600 font-bold'; }
+        
+        html += `
+            <div class="flex flex-col">
+                <span class="text-xs text-gray-500 uppercase tracking-wider">${type}</span>
+                <span class="${colorClass} text-lg">${sign}${change} <span class="text-xs font-normal text-gray-400 align-middle ml-1">(+${data.add} / -${data.cut})</span></span>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+    if (html) {
+         wrapper.classList.remove('hidden');
+    } else {
+         wrapper.classList.add('hidden');
+    }
+}
+
+// --- Deck Storage Logic ---
+
+function getSavedDecks() {
+    const saved = localStorage.getItem('mtg-diff-saved-decks');
+    return saved ? JSON.parse(saved) : {};
+}
+
+function updateDeckDropdowns() {
+    const savedDecks = getSavedDecks();
+    const selects = ['saved-decks-1', 'saved-decks-2'];
+    
+    selects.forEach(id => {
+        const select = document.getElementById(id);
+        if(!select) return;
+        
+        const currentValue = select.value;
+        
+        // Clear current options except first
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+        
+        // Sort decks by name
+        const deckNames = Object.keys(savedDecks).sort();
+        
+        deckNames.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+        });
+
+        // Restore selection if it still exists
+        if (savedDecks[currentValue]) {
+            select.value = currentValue;
+        } else {
+             select.value = "";
+        }
+    });
+}
+
+function saveDeck(deckId, nameInputId) {
+    const deckContent = document.getElementById(deckId).value;
+    const nameInput = document.getElementById(nameInputId);
+    const deckName = nameInput.value.trim();
+    
+    if (!deckName) {
+        alert("Please enter a name for the deck.");
+        return;
+    }
+    
+    if (!deckContent.trim()) {
+        alert("The deck is empty. Cannot save.");
+        return;
+    }
+
+    const savedDecks = getSavedDecks();
+    
+    // Check for overwrite
+    if (savedDecks[deckName] && !confirm(`Overwrite existing deck "${deckName}"?`)) {
+        return;
+    }
+
+    savedDecks[deckName] = deckContent;
+    localStorage.setItem('mtg-diff-saved-decks', JSON.stringify(savedDecks));
+    
+    updateDeckDropdowns();
+    nameInput.value = ''; // Clear input after save
+    
+    // Auto-select the newly saved deck in the dropdown for this column
+    const colIndex = deckId === 'deck1' ? '1' : '2';
+    const dropDown = document.getElementById(`saved-decks-${colIndex}`);
+    if(dropDown) dropDown.value = deckName;
+}
+
+function loadDeck(deckId, deckName, selectId) {
+    if (!deckName) return; 
+    
+    const savedDecks = getSavedDecks();
+    const content = savedDecks[deckName];
+    
+    if (content) {
+        document.getElementById(deckId).value = content;
+        
+        // Trigger updatePreview
+        const previewId = deckId === 'deck1' ? 'preview1' : 'preview2';
+        updatePreview(deckId, previewId);
+    }
+}
+
+function clearDeck(deckId) {
+    if (confirm("Are you sure you want to clear this deck?")) {
+        document.getElementById(deckId).value = '';
+        const previewId = deckId === 'deck1' ? 'preview1' : 'preview2';
+        updatePreview(deckId, previewId);
+        
+        // Reset dropdown
+        const colIndex = deckId === 'deck1' ? '1' : '2';
+        const dd = document.getElementById(`saved-decks-${colIndex}`);
+        if(dd) dd.value = "";
+    }
+}
+
+// --- Print Logic ---
+
 function printAddedCards() {
     const deck1Text = document.getElementById('deck1').value;
     const deck2Text = document.getElementById('deck2').value;
@@ -339,7 +532,6 @@ function printAddedCards() {
         return;
     }
 
-    // Use Blob URL instead of document.write
     // Chunk cards into groups of 9 (3x3 grid)
     const chunkSize = 9;
     const chunks = [];
@@ -351,7 +543,7 @@ function printAddedCards() {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Print Proxies (${allCards.length} cards)</title>
+            <title>Print Proxies</title>
             <style>
                 @page { margin: 0; size: auto; }
                 body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f0f0f0; }
@@ -410,11 +602,38 @@ function printAddedCards() {
                     height: 100%; 
                     object-fit: cover; 
                 }
+
+                .remove-btn {
+                    position: absolute;
+                    top: 5px;
+                    right: 5px;
+                    background: #000;
+                    color: white;
+                    border: 2px solid white;
+                    border-radius: 50%;
+                    width: 26px;
+                    height: 26px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    line-height: 1;
+                    cursor: pointer;
+                    z-index: 10;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+                }
+
+                .remove-btn:hover {
+                    background: #333;
+                    transform: scale(1.1);
+                }
                 
                 @media print {
                     @page { margin: 0; } /* Reset page margin and handle it in .page container */
                     body { background: white; padding: 0; margin: 0; }
                     .controls { display: none; }
+                    .remove-btn { display: none !important; } /* Hide X buttons */
                     .page { 
                         box-shadow: none; 
                         margin: 0 auto; 
@@ -428,28 +647,65 @@ function printAddedCards() {
         <body>
             <div class="controls">
                 <h2 style="margin-top:0">Print Proxies</h2>
-                <p>Generating ${allCards.length} cards. Images calculate layout for A4/Letter paper (3x3 grid).</p>
+                <p>Click the <strong>X</strong> on cards you want to remove before printing.</p>
                 <div style="margin-top: 15px;">
                     <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px;">Print Now</button>
                     <button onclick="window.close()" style="background: #e5e7eb; color: #374151; border: none; padding: 10px 20px; border-radius: 6px; margin-left: 10px; cursor: pointer;">Close</button>
                 </div>
             </div>
             
-            ${chunks.map(chunk => `
-                <div class="page">
-                    <div class="grid">
-                        ${chunk.map(name => {
-                            const safeName = encodeURIComponent(name);
-                            return `<div class="card-container">
-                                <img src="https://api.scryfall.com/cards/named?exact=${safeName}&format=image" 
-                                     alt="${name}" 
+            <div id="pages-container"></div>
+
+            <script>
+                const validCards = ${JSON.stringify(allCards)};
+                const PAGE_SIZE = 9;
+
+                function renderPages() {
+                   const container = document.getElementById('pages-container');
+                   container.innerHTML = '';
+                   
+                   const chunks = [];
+                   for (let i = 0; i < validCards.length; i += PAGE_SIZE) {
+                       chunks.push(validCards.slice(i, i + PAGE_SIZE));
+                   }
+
+                   chunks.forEach((chunk, pageIndex) => {
+                       const pageDiv = document.createElement('div');
+                       pageDiv.className = 'page';
+                       
+                       const gridDiv = document.createElement('div');
+                       gridDiv.className = 'grid';
+                       
+                       chunk.forEach((name, idxInChunk) => {
+                           // Calculate absolute index in validCards array
+                           const realIndex = (pageIndex * PAGE_SIZE) + idxInChunk;
+                           const safeName = encodeURIComponent(name);
+                           
+                           const cardDiv = document.createElement('div');
+                           cardDiv.className = 'card-container';
+                           cardDiv.innerHTML = \`
+                                <img src="https://api.scryfall.com/cards/named?exact=\${safeName}&format=image" 
+                                     alt="\${name}" 
                                      loading="eager"
-                                     onerror="this.parentElement.innerHTML='<div style=\\'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-size:12px\\'>Image not found:<br><strong>${name}</strong></div>'">
-                            </div>`;
-                        }).join('')}
-                    </div>
-                </div>
-            `).join('')}
+                                     onerror="this.parentElement.innerHTML='<div style=\\'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-size:12px\\'>Image not found:<br><strong>\${name}</strong></div>'">
+                                <button class="remove-btn" onclick="removeCard(\${realIndex})" title="Remove card">X</button>
+                           \`;
+                           gridDiv.appendChild(cardDiv);
+                       });
+                       
+                       pageDiv.appendChild(gridDiv);
+                       container.appendChild(pageDiv);
+                   });
+                }
+
+                function removeCard(index) {
+                    validCards.splice(index, 1);
+                    renderPages(); // Re-render to reflow grid
+                }
+
+                // Initial render
+                renderPages();
+            </script>
         </body>
         </html>
     `;
@@ -508,6 +764,7 @@ document.addEventListener('mouseout', (e) => {
 
 // Initialize from localStorage
 window.addEventListener('load', () => {
+    // Restore Saved Content
     const d1 = localStorage.getItem('deck1');
     if (d1) {
         document.getElementById('deck1').value = d1;
@@ -520,3 +777,36 @@ window.addEventListener('load', () => {
         updatePreview('deck2', 'preview2');
     }
 });
+
+function copyToClipboard(elementId, btnElement) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+
+    // Extract text manually to single-space lines and avoid layout-based gaps
+    const lines = [];
+    Array.from(container.children).forEach(child => {
+        // Collapse internal whitespace (newlines in HTML) to single spaces
+        const line = child.textContent.replace(/\s+/g, ' ').trim();
+        if (line) lines.push(line);
+    });
+
+    const text = lines.join('\n');
+
+    if (!text || text === 'No cards removed' || text === 'No cards added') {
+        alert('Nothing to copy.');
+        return;
+    }
+
+    navigator.clipboard.writeText(text).then(() => {
+        // Visual feedback
+        const originalContent = btnElement.innerHTML;
+        btnElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+        setTimeout(() => {
+            btnElement.innerHTML = originalContent;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+

@@ -39,18 +39,32 @@
         <!-- Results -->
         <div id="results" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="bg-white p-6 rounded-lg shadow-md">
-                <h3 class="text-lg font-bold mb-4 text-red-600 border-b pb-2">Cards to Remove (-)</h3>
+                <div class="flex items-center justify-between border-b pb-2 mb-4">
+                    <h3 class="text-lg font-bold text-red-600">Cards to Remove (-)</h3>
+                    <button onclick="copyToClipboard('diff-remove', this)" class="text-gray-500 hover:text-blue-600 transition-colors p-1 rounded hover:bg-gray-100" title="Copy to Clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
                 <div id="diff-remove" class="font-mono text-sm space-y-1"></div>
             </div>
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <div class="flex items-center justify-between border-b pb-2 mb-4">
                     <h3 class="text-lg font-bold text-green-600">Cards to Add (+)</h3>
-                    <button onclick="printAddedCards()" id="print-btn" class="hidden bg-green-100 hover:bg-green-200 text-green-800 text-xs font-semibold px-3 py-1 rounded transition-colors flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                        </svg>
-                        Print Proxies
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="copyToClipboard('diff-add', this)" class="text-gray-500 hover:text-blue-600 transition-colors p-1 rounded hover:bg-gray-100" title="Copy to Clipboard">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        <button onclick="printAddedCards()" id="print-btn" class="hidden bg-green-100 hover:bg-green-200 text-green-800 text-xs font-semibold px-3 py-1 rounded transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            Print Proxies
+                        </button>
+                    </div>
                 </div>
                 <div id="diff-add" class="font-mono text-sm space-y-1"></div>
             </div>
@@ -58,13 +72,23 @@
 
         <div id="stats" class="hidden mt-8 bg-white p-6 rounded-lg shadow-md">
              <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Changes Summary</h3>
-             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                 <div><span class="font-semibold">Mainboard Cuts:</span> <span id="stat-main-cuts">0</span></div>
                 <div><span class="font-semibold">Mainboard Adds:</span> <span id="stat-main-adds">0</span></div>
                 <div><span class="font-semibold">Sideboard Cuts:</span> <span id="stat-side-cuts">0</span></div>
                 <div><span class="font-semibold">Sideboard Adds:</span> <span id="stat-side-adds">0</span></div>
              </div>
+             
+             <!-- Type Stats -->
+             <div id="type-stats-container" class="hidden pt-4 border-t border-gray-100">
+                <h4 class="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">Significant Type Changes (Mainboard)</h4>
+                <div id="type-stats-grid" class="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 text-sm font-mono">
+                    <!-- Injected via JS -->
+                </div>
+             </div>
         </div>
+
+        <!-- Print Modal Removed -->
     </div>
     <script src="script.js"></script>
 </body>
