@@ -157,14 +157,14 @@ function updatePreview(inputId, previewId) {
              }
 
              return `<div>
-                ${match[1]} <span class="card-hover text-blue-600 font-medium" data-name="${safeName}">${name}</span> 
+                ${match[1]} <span class="card-hover text-violet-400 font-medium" data-name="${safeName}">${name}</span> 
                 <span class="${placeholderClass} ml-1 inline-flex items-center" data-name="${safeName}">${manaHtml}</span>
                 ${line.substring(match[0].length).trim() ? '...' : ''}
              </div>`;
         }
         
         if (line.toUpperCase().startsWith('SIDEBOARD:')) {
-            return `<div class="font-bold text-gray-500 mt-2">${line}</div>`;
+            return `<div class="font-bold text-zinc-500 mt-2">${line}</div>`;
         }
         
         // For other lines, just print them if they have content
@@ -242,7 +242,7 @@ function renderCard(item, type) {
     }
 
     return `<div class="${className} ml-4 flex items-center">
-        ${item.count} <span class="card-hover border-b border-dotted hover:text-blue-600 mx-1" data-name="${safeName}">${item.name}</span>
+        ${item.count} <span class="card-hover text-violet-400 hover:text-violet-300 mx-1" data-name="${safeName}">${item.name}</span>
         <span class="${placeholderClass} inline-flex items-center" data-name="${safeName}">${manaHtml}</span>
     </div>`;
 }
@@ -270,35 +270,35 @@ function calculateDiff() {
 
     let removeHTML = '';
     if (mainDiff.cuts.length > 0) {
-        removeHTML += `<div class="font-bold text-gray-700 mb-2">Mainboard</div>`;
+        removeHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
         mainDiff.cuts.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
             removeHTML += renderCard(i, 'remove');
         });
     }
     if (sideDiff.cuts.length > 0) {
-        removeHTML += `<div class="font-bold text-gray-700 mb-2 mt-4">Sideboard</div>`;
+        removeHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
         sideDiff.cuts.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
             removeHTML += renderCard(i, 'remove');
         });
     }
-    if (!removeHTML) removeHTML = '<div class="text-gray-400 italic">No cards removed</div>';
+    if (!removeHTML) removeHTML = '<div class="text-zinc-500 italic">No cards removed</div>';
     removeContainer.innerHTML = removeHTML;
 
 
     let addHTML = '';
     if (mainDiff.adds.length > 0) {
-        addHTML += `<div class="font-bold text-gray-700 mb-2">Mainboard</div>`;
+        addHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
         mainDiff.adds.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
             addHTML += renderCard(i, 'add');
         });
     }
     if (sideDiff.adds.length > 0) {
-        addHTML += `<div class="font-bold text-gray-700 mb-2 mt-4">Sideboard</div>`;
+        addHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
         sideDiff.adds.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
             addHTML += renderCard(i, 'add');
         });
     }
-    if (!addHTML) addHTML = '<div class="text-gray-400 italic">No cards added</div>';
+    if (!addHTML) addHTML = '<div class="text-zinc-500 italic">No cards added</div>';
     addContainer.innerHTML = addHTML;
 
     // Show/hide print button
@@ -378,15 +378,15 @@ function updateTypeStatsDisplay() {
         if (data.add === 0 && data.cut === 0) continue;
         
         const change = data.add - data.cut;
-        let colorClass = 'text-gray-500';
+        let colorClass = 'text-zinc-500';
         let sign = '';
-        if (change > 0) { colorClass = 'text-green-600 font-bold'; sign = '+'; }
-        if (change < 0) { colorClass = 'text-red-600 font-bold'; }
+        if (change > 0) { colorClass = 'text-green-400 font-bold'; sign = '+'; }
+        if (change < 0) { colorClass = 'text-red-400 font-bold'; }
         
         html += `
             <div class="flex flex-col">
-                <span class="text-xs text-gray-500 uppercase tracking-wider">${type}</span>
-                <span class="${colorClass} text-lg">${sign}${change} <span class="text-xs font-normal text-gray-400 align-middle ml-1">(+${data.add} / -${data.cut})</span></span>
+                <span class="text-xs text-zinc-400 uppercase tracking-wider">${type}</span>
+                <span class="${colorClass} text-lg">${sign}${change} <span class="text-xs font-normal text-zinc-500 align-middle ml-1">(+${data.add} / -${data.cut})</span></span>
             </div>
         `;
     }
@@ -543,118 +543,175 @@ function printAddedCards() {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Print Proxies</title>
+            <title>mtg-diff · print proxies</title>
+            <meta charset="UTF-8">
             <style>
+                @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
                 @page { margin: 0; size: auto; }
-                body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f0f0f0; }
-                
-                .controls { 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 8px; 
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-                    margin-bottom: 2rem; 
-                    text-align: center;
-                    max-width: 600px;
-                    margin-left: auto;
-                    margin-right: auto; 
+                *, *::before, *::after { box-sizing: border-box; }
+
+                body {
+                    margin: 0;
+                    font-family: 'JetBrains Mono', monospace;
+                    background: #09090b;
+                    color: #f4f4f5;
+                    min-height: 100vh;
                 }
-                
+
+                .chrome {
+                    background: #18181b;
+                    border-bottom: 1px solid #27272a;
+                    padding: 8px 16px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 11px;
+                    color: #52525b;
+                    letter-spacing: 0.05em;
+                }
+                .chrome-dot {
+                    width: 11px; height: 11px;
+                    border-radius: 50%;
+                    background: #3f3f46;
+                    display: inline-block;
+                    flex-shrink: 0;
+                }
+
+                .controls {
+                    background: #18181b;
+                    border: 1px solid #3f3f46;
+                    border-radius: 4px;
+                    padding: 24px;
+                    margin: 24px auto;
+                    text-align: center;
+                    max-width: 560px;
+                }
+                .controls-label {
+                    font-size: 11px;
+                    color: #a78bfa;
+                    letter-spacing: 0.12em;
+                    text-transform: uppercase;
+                    margin-bottom: 6px;
+                }
+                .controls p {
+                    color: #52525b;
+                    font-size: 12px;
+                    margin: 0 0 16px;
+                }
+                .btn-primary {
+                    background: transparent;
+                    color: #a78bfa;
+                    border: 1px solid #7c3aed;
+                    padding: 8px 20px;
+                    border-radius: 4px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    font-size: 13px;
+                    font-family: 'JetBrains Mono', monospace;
+                    letter-spacing: 0.08em;
+                    transition: background 0.15s;
+                }
+                .btn-primary:hover { background: #2e1065; }
+                .btn-secondary {
+                    background: transparent;
+                    color: #52525b;
+                    border: 1px solid #3f3f46;
+                    padding: 8px 20px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    font-family: 'JetBrains Mono', monospace;
+                    margin-left: 8px;
+                    transition: background 0.15s;
+                }
+                .btn-secondary:hover { background: #27272a; }
+
+                .pages-wrapper { padding: 24px; }
+
                 .page {
                     width: 100%;
-                    max-width: 190mm; /* Fit within standard print margins */
+                    max-width: 190mm;
                     margin: 0 auto;
                     background: white;
                     page-break-after: always;
                     break-after: page;
-                    padding-top: 10mm; /* Top margin simulation */
+                    padding-top: 10mm;
                 }
+                .page:last-child { page-break-after: auto; break-after: auto; }
 
-                .page:last-child {
-                    page-break-after: auto;
-                    break-after: auto;
-                }
-                
-                .grid { 
-                    display: grid; 
-                    grid-template-columns: repeat(3, 1fr); 
-                    gap: 0; 
+                .grid {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 0;
                     width: 100%;
                 }
-                
-                .card-container { 
-                    position: relative; 
-                    width: 100%; 
-                    /* 63mm / 88mm ratio is roughly 0.715. Padding bottom is inverse aspect ratio ~140% */
-                    padding-bottom: 139.6%; 
-                    overflow: hidden; 
+
+                .card-container {
+                    position: relative;
+                    width: 100%;
+                    padding-bottom: 139.6%;
+                    overflow: hidden;
                     background: #eee;
-                    border: 0.5px dashed #ddd; /* Light guide for cutting */
-                    box-sizing: border-box;
+                    border: 0.5px dashed #ddd;
                     break-inside: avoid;
                 }
-                
-                .card-container img { 
-                    position: absolute; 
-                    top: 0; 
-                    left: 0; 
-                    width: 100%; 
-                    height: 100%; 
-                    object-fit: cover; 
+                .card-container img {
+                    position: absolute;
+                    top: 0; left: 0;
+                    width: 100%; height: 100%;
+                    object-fit: cover;
                 }
 
                 .remove-btn {
                     position: absolute;
-                    top: 5px;
-                    right: 5px;
-                    background: #000;
+                    top: 5px; right: 5px;
+                    background: #7c3aed;
                     color: white;
                     border: 2px solid white;
                     border-radius: 50%;
-                    width: 26px;
-                    height: 26px;
-                    font-size: 16px;
+                    width: 26px; height: 26px;
+                    font-size: 14px;
                     font-weight: bold;
-                    line-height: 1;
                     cursor: pointer;
                     z-index: 10;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+                    font-family: 'JetBrains Mono', monospace;
                 }
+                .remove-btn:hover { background: #6d28d9; transform: scale(1.1); }
 
-                .remove-btn:hover {
-                    background: #333;
-                    transform: scale(1.1);
-                }
-                
                 @media print {
-                    @page { margin: 0; } /* Reset page margin and handle it in .page container */
-                    body { background: white; padding: 0; margin: 0; }
+                    @page { margin: 0; }
+                    body { background: white; padding: 0; margin: 0; color: black; }
+                    .chrome { display: none; }
                     .controls { display: none; }
-                    .remove-btn { display: none !important; } /* Hide X buttons */
-                    .page { 
-                        box-shadow: none; 
-                        margin: 0 auto; 
-                        /* Ensure full height usage to force break correctly */
-                        min-height: 100vh; 
-                    }
-                    .card-container { border: 1px dashed #ccc; } 
+                    .pages-wrapper { padding: 0; }
+                    .remove-btn { display: none !important; }
+                    .page { box-shadow: none; margin: 0 auto; min-height: 100vh; }
+                    .card-container { border: 1px dashed #ccc; }
                 }
             </style>
         </head>
         <body>
+            <div class="chrome">
+                <span class="chrome-dot"></span>
+                <span class="chrome-dot"></span>
+                <span class="chrome-dot"></span>
+                <span style="margin-left:10px;">mtg-diff · print proxies</span>
+            </div>
+
             <div class="controls">
-                <h2 style="margin-top:0">Print Proxies</h2>
-                <p>Click the <strong>X</strong> on cards you want to remove before printing.</p>
-                <div style="margin-top: 15px;">
-                    <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px;">Print Now</button>
-                    <button onclick="window.close()" style="background: #e5e7eb; color: #374151; border: none; padding: 10px 20px; border-radius: 6px; margin-left: 10px; cursor: pointer;">Close</button>
+                <div class="controls-label">// print proxies</div>
+                <p>click ✕ on cards to remove · then hit print</p>
+                <div>
+                    <button class="btn-primary" onclick="setTimeout(() => window.print(), 100)">&gt;_ print now</button>
+                    <button class="btn-secondary" onclick="window.close()">close</button>
                 </div>
             </div>
-            
-            <div id="pages-container"></div>
+
+            <div class="pages-wrapper" id="pages-container"></div>
 
             <script>
                 const validCards = ${JSON.stringify(allCards)};
