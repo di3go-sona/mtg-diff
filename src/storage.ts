@@ -1,10 +1,12 @@
-import { GroupingMode } from './card';
+import { GroupingMode, SortMode, SortDirection } from './card';
 
 const STORAGE_KEYS = {
   DECK_1: 'deck1',
   DECK_2: 'deck2',
   SAVED_DECKS: 'mtg-diff-saved-decks',
   GROUPING_MODE: 'mtg-diff-grouping',
+  SORT_MODE: 'mtg-diff-sort-mode',
+  SORT_DIRECTION: 'mtg-diff-sort-direction',
   SECTION_VISIBILITY: 'mtg-diff-section',
 } as const;
 
@@ -101,6 +103,30 @@ export function getSectionVisibility(sectionId: SectionId): boolean {
 export function setSectionVisibility(sectionId: SectionId, visible: boolean): void {
   const key = `${STORAGE_KEYS.SECTION_VISIBILITY}-${sectionId}`;
   safeSetItem(key, visible ? 'visible' : 'hidden');
+}
+
+export function getSortMode(): SortMode {
+  const saved = safeGetItem(STORAGE_KEYS.SORT_MODE);
+  if (saved && ['name', 'cmc', 'price'].includes(saved)) {
+    return saved as SortMode;
+  }
+  return 'name';
+}
+
+export function setSortMode(mode: SortMode): void {
+  safeSetItem(STORAGE_KEYS.SORT_MODE, mode);
+}
+
+export function getSortDirection(): SortDirection {
+  const saved = safeGetItem(STORAGE_KEYS.SORT_DIRECTION);
+  if (saved && ['asc', 'desc'].includes(saved)) {
+    return saved as SortDirection;
+  }
+  return 'asc';
+}
+
+export function setSortDirection(direction: SortDirection): void {
+  safeSetItem(STORAGE_KEYS.SORT_DIRECTION, direction);
 }
 
 export function clearAllData(): void {

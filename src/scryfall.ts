@@ -10,6 +10,10 @@ interface ScryfallCardResponse {
     mana_cost?: string;
     type_line?: string;
   }>;
+  prices?: {
+    usd?: string | null;
+    usd_foil?: string | null;
+  };
 }
 
 interface ScryfallCollectionResponse {
@@ -26,6 +30,7 @@ const RATE_LIMIT_MS = 50;
 const MAX_BATCH_SIZE = 75;
 const DEFAULT_CACHE_CAPACITY = 500;
 const STORAGE_KEY = 'mtg-diff-card-cache';
+const CACHE_VERSION = 2;
 const SAVE_DEBOUNCE_MS = 1000;
 
 export class ScryfallClient {
@@ -157,6 +162,7 @@ export class ScryfallClient {
               manaCost: '',
               typeLine: '',
               cmc: 0,
+              price: null,
             };
             result.set(item.name, emptyCard);
             this.cache.set(item.name, emptyCard);
@@ -170,6 +176,7 @@ export class ScryfallClient {
             manaCost: '',
             typeLine: '',
             cmc: 0,
+            price: null,
           });
         }
       }
@@ -182,6 +189,7 @@ export class ScryfallClient {
     let manaCost = card.mana_cost || '';
     let typeLine = card.type_line || '';
     const cmc = card.cmc || 0;
+    const price = this.parsePrice(card.prices);
 
     if (!manaCost && card.card_faces && card.card_faces.length > 0) {
       manaCost = card.card_faces[0].mana_cost || '';
@@ -196,7 +204,20 @@ export class ScryfallClient {
       manaCost,
       typeLine,
       cmc,
+      price,
     };
+  }
+
+  private parsePrice(prices?: { usd?: string | null; usd_foil?: string | null }): number | null {
+    if (prices?.usd) {
+      const parsed = parseFloat(prices.usd);
+      return isNaN(parsed) ? null : parsed;
+    }
+    if (prices?.usd_foil) {
+      const parsed = parseFloat(prices.usd_foil);
+      return isNaN(parsed) ? null : parsed;
+    }
+    return null;
   }
 
   private async enforceRateLimit(): Promise<void> {
@@ -222,9 +243,9 @@ export class ScryfallClient {
         return new LRUCache<CardData>(this.capacity, () => this.scheduleSave());
       }
 
-      const data: SerializedCache<CardData> = JSON.parse(stored);
+      const data: SerializedCache<CardData> & { version?: number } = JSON.parse(stored);
 
-      if (!data.items || !Array.isArray(data.items)) {
+      if (!data.items || !Array.isArray(data.items) || data.version !== CACHE_VERSION) {
         return new LRUCache<CardData>(this.capacity, () => this.scheduleSave());
       }
 
@@ -254,7 +275,8 @@ export class ScryfallClient {
   private persistCache(): void {
     try {
       const serialized = this.cache.serialize();
-      const json = JSON.stringify(serialized);
+      const dataToStore = { ...serialized, version: CACHE_VERSION };
+      const json = JSON.stringify(dataToStore);
 
       try {
         localStorage.setItem(STORAGE_KEY, json);
@@ -279,7 +301,8 @@ export class ScryfallClient {
 
     try {
       const serialized = this.cache.serialize();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
+      const dataToStore = { ...serialized, version: CACHE_VERSION };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
     } catch {
       this.removePersistedCache();
     }

@@ -15,6 +15,7 @@ export interface CardData {
   manaCost: string;
   typeLine: string;
   cmc: number;
+  price: number | null;
 }
 
 export interface CardIdentity {
@@ -43,6 +44,8 @@ export interface DeckDiff {
 }
 
 export type GroupingMode = 'none' | 'category' | 'cmc';
+export type SortMode = 'name' | 'cmc' | 'price';
+export type SortDirection = 'asc' | 'desc';
 
 export interface CardGroup {
   label: string;

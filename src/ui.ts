@@ -1,4 +1,4 @@
-import { CardQuantity, CardGroup, DeckDiff, GroupingMode } from './card';
+import { CardQuantity, CardGroup, DeckDiff, GroupingMode, SortMode, SortDirection } from './card';
 import { scryfallClient } from './scryfall';
 import { groupItems, getAllCardNames } from './diff';
 import { saveDeckContent } from './storage';
@@ -27,6 +27,17 @@ export function getManaHtml(manaCost: string): string {
   });
 }
 
+export function calculateTotal(items: CardQuantity[]): number {
+  return items.reduce((sum, item) => {
+    const price = scryfallClient.getCached(item.name)?.price ?? 0;
+    return sum + price * item.count;
+  }, 0);
+}
+
+export function formatPrice(price: number): string {
+  return `$${price.toFixed(2)}`;
+}
+
 export function renderCard(item: CardQuantity, type: CardType): string {
   const className = type === 'add' ? 'card-add' : type === 'remove' ? 'card-remove' : 'card-unchanged';
   const safeName = escapeHtml(item.name);
@@ -34,31 +45,43 @@ export function renderCard(item: CardQuantity, type: CardType): string {
   const cached = scryfallClient.getCached(item.name);
   const manaHtml = cached ? getManaHtml(cached.manaCost) : '';
   const placeholderClass = cached ? 'mana-rendered' : 'mana-placeholder';
+  const priceHtml = cached?.price !== null && cached?.price !== undefined
+    ? `<span class="text-zinc-500 ml-2">${formatPrice(cached.price)}</span>`
+    : '';
 
   return `<div class="${className} ml-4 flex items-center">
     ${item.count} <span class="card-hover text-violet-400 hover:text-violet-300 mx-1" data-name="${safeName}">${safeName}</span>
     <span class="${placeholderClass} inline-flex items-center" data-name="${safeName}">${manaHtml}</span>
+    ${priceHtml}
   </div>`;
 }
 
-export function renderGroupedCards(items: CardQuantity[], type: CardType, mode: GroupingMode): string {
-  if (mode === 'none') {
-    return items
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((i) => renderCard(i, type))
-      .join('');
-  }
-
-  const groups = groupItems(items, mode);
+export function renderGroupedCards(
+  items: CardQuantity[],
+  type: CardType,
+  groupingMode: GroupingMode,
+  sortMode: SortMode,
+  sortDirection: SortDirection
+): string {
+  const groups = groupItems(items, groupingMode, sortMode, sortDirection);
 
   return groups
     .map((group: CardGroup) => {
       const cardsHtml = group.items.map((i) => renderCard(i, type)).join('');
       const totalCount = group.items.reduce((sum, item) => sum + item.count, 0);
-      const label = mode === 'cmc' ? `CMC ${group.label}` : group.label;
+      const groupTotal = calculateTotal(group.items);
+      const groupTotalHtml = groupTotal > 0
+        ? `<span class="text-zinc-600 ml-2">${formatPrice(groupTotal)}</span>`
+        : '';
+
+      if (groupingMode === 'none') {
+        return cardsHtml;
+      }
+
+      const label = groupingMode === 'cmc' ? `CMC ${group.label}` : group.label;
 
       return `<div class="mb-3">
-        <div class="text-xs text-zinc-500 uppercase tracking-wider mb-1 ml-2">${label} <span class="text-zinc-600">(${totalCount})</span></div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wider mb-1 ml-2">${label} <span class="text-zinc-600">(${totalCount})</span>${groupTotalHtml}</div>
         ${cardsHtml}
       </div>`;
     })
@@ -119,7 +142,12 @@ export function renderDeckPreview(text: string, previewId: string): void {
   queueManaFetch(['preview1', 'preview2']);
 }
 
-export function renderDiffResults(diff: DeckDiff, mode: GroupingMode): void {
+export function renderDiffResults(
+  diff: DeckDiff,
+  groupingMode: GroupingMode,
+  sortMode: SortMode,
+  sortDirection: SortDirection
+): void {
   const removeContainer = document.getElementById('diff-remove');
   const addContainer = document.getElementById('diff-add');
   const unchangedContainer = document.getElementById('diff-unchanged');
@@ -128,42 +156,57 @@ export function renderDiffResults(diff: DeckDiff, mode: GroupingMode): void {
     let removeHTML = '';
     if (diff.mainDiff.cuts.length > 0) {
       removeHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
-      removeHTML += renderGroupedCards(diff.mainDiff.cuts, 'remove', mode);
+      removeHTML += renderGroupedCards(diff.mainDiff.cuts, 'remove', groupingMode, sortMode, sortDirection);
     }
     if (diff.sideDiff.cuts.length > 0) {
       removeHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
-      removeHTML += renderGroupedCards(diff.sideDiff.cuts, 'remove', mode);
+      removeHTML += renderGroupedCards(diff.sideDiff.cuts, 'remove', groupingMode, sortMode, sortDirection);
     }
     if (!removeHTML) removeHTML = '<div class="text-zinc-500 italic">No cards removed</div>';
-    removeContainer.innerHTML = removeHTML;
+
+    const totalRemoved = calculateTotal([...diff.mainDiff.cuts, ...diff.sideDiff.cuts]);
+    const totalRemovedHtml = totalRemoved > 0
+      ? `<div class="text-xs text-zinc-500 mt-4 pt-2 border-t border-zinc-700">Total: ${formatPrice(totalRemoved)}</div>`
+      : '';
+    removeContainer.innerHTML = removeHTML + totalRemovedHtml;
   }
 
   if (addContainer) {
     let addHTML = '';
     if (diff.mainDiff.adds.length > 0) {
       addHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
-      addHTML += renderGroupedCards(diff.mainDiff.adds, 'add', mode);
+      addHTML += renderGroupedCards(diff.mainDiff.adds, 'add', groupingMode, sortMode, sortDirection);
     }
     if (diff.sideDiff.adds.length > 0) {
       addHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
-      addHTML += renderGroupedCards(diff.sideDiff.adds, 'add', mode);
+      addHTML += renderGroupedCards(diff.sideDiff.adds, 'add', groupingMode, sortMode, sortDirection);
     }
     if (!addHTML) addHTML = '<div class="text-zinc-500 italic">No cards added</div>';
-    addContainer.innerHTML = addHTML;
+
+    const totalAdded = calculateTotal([...diff.mainDiff.adds, ...diff.sideDiff.adds]);
+    const totalAddedHtml = totalAdded > 0
+      ? `<div class="text-xs text-zinc-500 mt-4 pt-2 border-t border-zinc-700">Total: ${formatPrice(totalAdded)}</div>`
+      : '';
+    addContainer.innerHTML = addHTML + totalAddedHtml;
   }
 
   if (unchangedContainer) {
     let unchangedHTML = '';
     if (diff.mainDiff.unchanged.length > 0) {
       unchangedHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
-      unchangedHTML += renderGroupedCards(diff.mainDiff.unchanged, 'unchanged', mode);
+      unchangedHTML += renderGroupedCards(diff.mainDiff.unchanged, 'unchanged', groupingMode, sortMode, sortDirection);
     }
     if (diff.sideDiff.unchanged.length > 0) {
       unchangedHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
-      unchangedHTML += renderGroupedCards(diff.sideDiff.unchanged, 'unchanged', mode);
+      unchangedHTML += renderGroupedCards(diff.sideDiff.unchanged, 'unchanged', groupingMode, sortMode, sortDirection);
     }
     if (!unchangedHTML) unchangedHTML = '<div class="text-zinc-500 italic">No unchanged cards</div>';
-    unchangedContainer.innerHTML = unchangedHTML;
+
+    const totalUnchanged = calculateTotal([...diff.mainDiff.unchanged, ...diff.sideDiff.unchanged]);
+    const totalUnchangedHtml = totalUnchanged > 0
+      ? `<div class="text-xs text-zinc-500 mt-4 pt-2 border-t border-zinc-700">Total: ${formatPrice(totalUnchanged)}</div>`
+      : '';
+    unchangedContainer.innerHTML = unchangedHTML + totalUnchangedHtml;
   }
 
   updatePrintButtonVisibility(diff);
@@ -297,4 +340,10 @@ export function copyToClipboard(elementId: string, btnElement: HTMLElement): voi
       console.error('Failed to copy: ', err);
       alert('Failed to copy to clipboard');
     });
+}
+
+export function updateSortDirectionButton(direction: SortDirection): void {
+  const btn = document.getElementById('sort-direction-btn');
+  if (!btn) return;
+  btn.textContent = direction === 'asc' ? '↓' : '↑';
 }

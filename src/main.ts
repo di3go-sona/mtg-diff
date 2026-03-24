@@ -1,4 +1,4 @@
-import { DeckDiff, GroupingMode } from './card';
+import { DeckDiff, GroupingMode, SortMode, SortDirection } from './card';
 import { parseDeck } from './deckParser';
 import { calculateDeckDiff } from './diff';
 import {
@@ -7,15 +7,21 @@ import {
   getSavedDecks,
   saveDeck,
   getGroupingMode,
-  setGroupingMode,
+  setGroupingMode as setGroupingModeStorage,
+  getSortMode,
+  setSortMode as setSortModeStorage,
+  getSortDirection,
+  setSortDirection as setSortDirectionStorage,
   getSectionVisibility,
   setSectionVisibility,
 } from './storage';
-import { renderDeckPreview, renderDiffResults, copyToClipboard, updateDeckDropdowns } from './ui';
+import { renderDeckPreview, renderDiffResults, copyToClipboard, updateDeckDropdowns, updateSortDirectionButton } from './ui';
 import { generatePrintPage } from './print';
 
 let currentDiff: DeckDiff | null = null;
 let currentGroupingMode: GroupingMode = 'none';
+let currentSortMode: SortMode = 'name';
+let currentSortDirection: SortDirection = 'asc';
 
 function $(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -23,7 +29,10 @@ function $(id: string): HTMLElement | null {
 
 function initApp(): void {
   currentGroupingMode = getGroupingMode();
+  currentSortMode = getSortMode();
+  currentSortDirection = getSortDirection();
   initGroupingSelect();
+  initSortControls();
   initSectionVisibility();
   initSavedDecks();
   initDeckInputs();
@@ -39,6 +48,14 @@ function initGroupingSelect(): void {
       setGrouping(select.value as GroupingMode);
     });
   }
+}
+
+function initSortControls(): void {
+  const sortSelect = $('sort-select') as HTMLSelectElement | null;
+  if (sortSelect) {
+    sortSelect.value = currentSortMode;
+  }
+  updateSortDirectionButton(currentSortDirection);
 }
 
 function initSectionVisibility(): void {
@@ -137,6 +154,8 @@ function initGlobalFunctions(): void {
   (window as any).updatePreview = handleUpdatePreview;
   (window as any).calculateDiff = handleCalculateDiff;
   (window as any).setGroupingMode = setGrouping;
+  (window as any).setSortMode = setSortMode;
+  (window as any).toggleSortDirection = toggleSortDirection;
   (window as any).toggleSectionCheckbox = handleToggleSection;
   (window as any).copyToClipboard = handleCopyToClipboard;
   (window as any).printAddedCards = handlePrint;
@@ -168,17 +187,36 @@ function handleCalculateDiff(): void {
 
   currentDiff = calculateDeckDiff(d1, d2);
 
-  renderDiffResults(currentDiff, currentGroupingMode);
+  renderDiffResults(currentDiff, currentGroupingMode, currentSortMode, currentSortDirection);
 
   results.classList.remove('hidden');
 }
 
 function setGrouping(mode: GroupingMode): void {
   currentGroupingMode = mode;
-  setGroupingMode(mode);
+  setGroupingModeStorage(mode);
 
   if (currentDiff) {
-    renderDiffResults(currentDiff, currentGroupingMode);
+    renderDiffResults(currentDiff, currentGroupingMode, currentSortMode, currentSortDirection);
+  }
+}
+
+function setSortMode(mode: SortMode): void {
+  currentSortMode = mode;
+  setSortModeStorage(mode);
+
+  if (currentDiff) {
+    renderDiffResults(currentDiff, currentGroupingMode, currentSortMode, currentSortDirection);
+  }
+}
+
+function toggleSortDirection(): void {
+  currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+  setSortDirectionStorage(currentSortDirection);
+  updateSortDirectionButton(currentSortDirection);
+
+  if (currentDiff) {
+    renderDiffResults(currentDiff, currentGroupingMode, currentSortMode, currentSortDirection);
   }
 }
 
