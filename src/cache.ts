@@ -5,15 +5,22 @@ export interface CacheNode<V> {
   next: CacheNode<V> | null;
 }
 
+export interface SerializedCache<V> {
+  items: Array<{ key: string; value: V }>;
+  capacity: number;
+}
+
 export class LRUCache<V> {
   private capacity: number;
   private cache: Map<string, CacheNode<V>>;
   private head: CacheNode<V> | null = null;
   private tail: CacheNode<V> | null = null;
+  private onSet?: () => void;
 
-  constructor(capacity: number) {
+  constructor(capacity: number, onSet?: () => void) {
     this.capacity = capacity;
     this.cache = new Map();
+    this.onSet = onSet;
   }
 
   get(key: string): V | undefined {
@@ -30,6 +37,7 @@ export class LRUCache<V> {
     if (existingNode) {
       existingNode.value = value;
       this.moveToFront(existingNode);
+      this.onSet?.();
       return;
     }
 
@@ -54,6 +62,7 @@ export class LRUCache<V> {
     }
 
     this.cache.set(key, newNode);
+    this.onSet?.();
   }
 
   has(key: string): boolean {
@@ -66,6 +75,7 @@ export class LRUCache<V> {
 
     this.removeNode(node);
     this.cache.delete(key);
+    this.onSet?.();
     return true;
   }
 
@@ -73,10 +83,49 @@ export class LRUCache<V> {
     this.cache.clear();
     this.head = null;
     this.tail = null;
+    this.onSet?.();
   }
 
   get size(): number {
     return this.cache.size;
+  }
+
+  serialize(): SerializedCache<V> {
+    const items: Array<{ key: string; value: V }> = [];
+    let current = this.head;
+
+    while (current) {
+      items.push({ key: current.key, value: current.value });
+      current = current.next;
+    }
+
+    return {
+      items,
+      capacity: this.capacity,
+    };
+  }
+
+  static deserialize<V>(data: SerializedCache<V>, onSet?: () => void): LRUCache<V> {
+    const cache = new LRUCache<V>(data.capacity, onSet);
+
+    for (let i = data.items.length - 1; i >= 0; i--) {
+      const item = data.items[i];
+      cache.set(item.key, item.value);
+    }
+
+    return cache;
+  }
+
+  keys(): string[] {
+    const keys: string[] = [];
+    let current = this.head;
+
+    while (current) {
+      keys.push(current.key);
+      current = current.next;
+    }
+
+    return keys;
   }
 
   private moveToFront(node: CacheNode<V>): void {

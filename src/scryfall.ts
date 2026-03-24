@@ -1,5 +1,5 @@
 import { CardData, CardType, getCardType } from './card';
-import { LRUCache } from './cache';
+import { LRUCache, SerializedCache } from './cache';
 
 interface ScryfallCardResponse {
   name: string;
@@ -24,7 +24,9 @@ interface ScryfallCollectionRequest {
 const SCRYFALL_API_BASE = 'https://api.scryfall.com';
 const RATE_LIMIT_MS = 50;
 const MAX_BATCH_SIZE = 75;
-const CACHE_CAPACITY = 500;
+const DEFAULT_CACHE_CAPACITY = 500;
+const STORAGE_KEY = 'mtg-diff-card-cache';
+const SAVE_DEBOUNCE_MS = 1000;
 
 export class ScryfallClient {
   private lastRequestTime = 0;
@@ -35,9 +37,12 @@ export class ScryfallClient {
   }> = [];
   private isProcessing = false;
   private cache: LRUCache<CardData>;
+  private saveTimer: number | null = null;
+  private capacity: number;
 
-  constructor(cacheCapacity = CACHE_CAPACITY) {
-    this.cache = new LRUCache<CardData>(cacheCapacity);
+  constructor(capacity = DEFAULT_CACHE_CAPACITY) {
+    this.capacity = capacity;
+    this.cache = this.loadCache();
   }
 
   async fetchCards(names: string[]): Promise<Map<string, CardData>> {
@@ -78,7 +83,12 @@ export class ScryfallClient {
     return card ? getCardType(card.typeLine) : 'Unknown';
   }
 
-  private async queueFetchRequest(names: string[]): Promise<Map<string, CardData>> {
+  clearCache(): void {
+    this.cache.clear();
+    this.removePersistedCache();
+  }
+
+  private queueFetchRequest(names: string[]): Promise<Map<string, CardData>> {
     return new Promise((resolve, reject) => {
       this.pendingQueue.push({ names, resolve, reject });
       this.processQueue();
@@ -205,8 +215,82 @@ export class ScryfallClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  clearCache(): void {
-    this.cache.clear();
+  private loadCache(): LRUCache<CardData> {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        return new LRUCache<CardData>(this.capacity, () => this.scheduleSave());
+      }
+
+      const data: SerializedCache<CardData> = JSON.parse(stored);
+
+      if (!data.items || !Array.isArray(data.items)) {
+        return new LRUCache<CardData>(this.capacity, () => this.scheduleSave());
+      }
+
+      const cache = LRUCache.deserialize<CardData>(
+        { ...data, capacity: this.capacity },
+        () => this.scheduleSave()
+      );
+
+      return cache;
+    } catch (error) {
+      console.warn('Failed to load card cache from localStorage:', error);
+      return new LRUCache<CardData>(this.capacity, () => this.scheduleSave());
+    }
+  }
+
+  private scheduleSave(): void {
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+    }
+
+    this.saveTimer = window.setTimeout(() => {
+      this.saveTimer = null;
+      this.persistCache();
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  private persistCache(): void {
+    try {
+      const serialized = this.cache.serialize();
+      const json = JSON.stringify(serialized);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, json);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+          this.evictAndRetry();
+        } else {
+          throw e;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to persist card cache to localStorage:', error);
+    }
+  }
+
+  private evictAndRetry(): void {
+    const halfCapacity = Math.floor(this.capacity / 2);
+
+    while (this.cache.size > halfCapacity) {
+      this.cache.delete(this.cache.keys().pop()!);
+    }
+
+    try {
+      const serialized = this.cache.serialize();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
+    } catch {
+      this.removePersistedCache();
+    }
+  }
+
+  private removePersistedCache(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
   }
 }
 
