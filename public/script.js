@@ -96,7 +96,6 @@ async function fetchManaData(cardNames, containers) {
     }
     
     updateManaSymbolsInContainers(containers);
-    updateTypeStatsDisplay();
 }
 
 function queueManaFetch(containerIds) {
@@ -211,6 +210,7 @@ function parseDeck(text) {
 function getDiff(source, target) {
     const cuts = [];
     const adds = [];
+    const unchanged = [];
 
     // Check source against target (for cuts)
     for (const [card, qty] of Object.entries(source)) {
@@ -225,14 +225,16 @@ function getDiff(source, target) {
         const sourceQty = source[card] || 0;
         if (qty > sourceQty) {
             adds.push({ name: card, count: qty - sourceQty });
+        } else if (qty === sourceQty && qty > 0) {
+            unchanged.push({ name: card, count: qty });
         }
     }
 
-    return { cuts, adds };
+    return { cuts, adds, unchanged };
 }
 
 function renderCard(item, type) {
-    const className = type === 'add' ? 'card-add' : 'card-remove';
+    const className = type === 'add' ? 'card-add' : type === 'remove' ? 'card-remove' : 'card-unchanged';
     const safeName = item.name.replace(/"/g, '&quot;');
     
     // Check cache for immediate render
@@ -301,9 +303,10 @@ function renderGroupedCards(items, type) {
     return groups.map(group => {
         const sortedItems = group.items.sort((a, b) => a.name.localeCompare(b.name));
         const cardsHtml = sortedItems.map(i => renderCard(i, type)).join('');
+        const totalCount = group.items.reduce((sum, item) => sum + item.count, 0);
         const label = groupingMode === 'cmc' ? `CMC ${group.label}` : group.label;
         return `<div class="mb-3">
-            <div class="text-xs text-zinc-500 uppercase tracking-wider mb-1 ml-2">${label}</div>
+            <div class="text-xs text-zinc-500 uppercase tracking-wider mb-1 ml-2">${label} <span class="text-zinc-600">(${totalCount})</span></div>
             ${cardsHtml}
         </div>`;
     }).join('');
@@ -325,10 +328,10 @@ function calculateDiff() {
 
     // Save for stats
     lastDiffResult = { mainDiff, sideDiff };
-    updateTypeStatsDisplay();
 
     const removeContainer = document.getElementById('diff-remove');
     const addContainer = document.getElementById('diff-add');
+    const unchangedContainer = document.getElementById('diff-unchanged');
 
     let removeHTML = '';
     if (mainDiff.cuts.length > 0) {
@@ -355,6 +358,18 @@ function calculateDiff() {
     if (!addHTML) addHTML = '<div class="text-zinc-500 italic">No cards added</div>';
     addContainer.innerHTML = addHTML;
 
+    let unchangedHTML = '';
+    if (mainDiff.unchanged.length > 0) {
+        unchangedHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
+        unchangedHTML += renderGroupedCards(mainDiff.unchanged, 'unchanged');
+    }
+    if (sideDiff.unchanged.length > 0) {
+        unchangedHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
+        unchangedHTML += renderGroupedCards(sideDiff.unchanged, 'unchanged');
+    }
+    if (!unchangedHTML) unchangedHTML = '<div class="text-zinc-500 italic">No unchanged cards</div>';
+    unchangedContainer.innerHTML = unchangedHTML;
+
     // Show/hide print button
     const printBtn = document.getElementById('print-btn');
     if (mainDiff.adds.length > 0 || sideDiff.adds.length > 0) {
@@ -363,78 +378,9 @@ function calculateDiff() {
         if(printBtn) printBtn.classList.add('hidden');
     }
 
-    // Update stats
-    document.getElementById('stat-main-cuts').textContent = mainDiff.cuts.reduce((a,b) => a + b.count, 0);
-    document.getElementById('stat-main-adds').textContent = mainDiff.adds.reduce((a,b) => a + b.count, 0);
-    document.getElementById('stat-side-cuts').textContent = sideDiff.cuts.reduce((a,b) => a + b.count, 0);
-    document.getElementById('stat-side-adds').textContent = sideDiff.adds.reduce((a,b) => a + b.count, 0);
-
     document.getElementById('results').classList.remove('hidden');
-    document.getElementById('stats').classList.remove('hidden');
 
-    // Fetch and render mana for results
-    // We can't rely only on the debounced preview fetch because results might contain removed cards not in current inputs?
-    // Actually results are subsets of inputs so fetchQueue logic handles it if we call it.
-    queueManaFetch(['diff-remove', 'diff-add']);
-}
-
-function updateTypeStatsDisplay() {
-    if (!lastDiffResult) return;
-    
-    const { mainDiff } = lastDiffResult;
-    
-    const stats = {};
-    const initStat = (t) => { if (!stats[t]) stats[t] = { add: 0, cut: 0 }; };
-
-    mainDiff.cuts.forEach(item => {
-        const t = getType(cardTypeCache[item.name]);
-        initStat(t);
-        stats[t].cut += item.count;
-    });
-    
-    mainDiff.adds.forEach(item => {
-        const t = getType(cardTypeCache[item.name]);
-        initStat(t);
-        stats[t].add += item.count;
-    });
-    
-    const container = document.getElementById('type-stats-grid');
-    const wrapper = document.getElementById('type-stats-container');
-    if (!container || !wrapper) return;
-    
-    let html = '';
-    const sortedTypes = Object.keys(stats).sort(); // Alphabetical is fine, or custom order
-    
-    // Custom sort order
-    const order = ['Land', 'Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Battle', 'Other', 'Unknown'];
-    sortedTypes.sort((a,b) => order.indexOf(a) - order.indexOf(b));
-
-    for (const type of sortedTypes) {
-        if (type === 'Unknown') continue; 
-        
-        const data = stats[type];
-        if (data.add === 0 && data.cut === 0) continue;
-        
-        const change = data.add - data.cut;
-        let colorClass = 'text-zinc-500';
-        let sign = '';
-        if (change > 0) { colorClass = 'text-green-400 font-bold'; sign = '+'; }
-        if (change < 0) { colorClass = 'text-red-400 font-bold'; }
-        
-        html += `
-            <div class="flex flex-col">
-                <span class="text-xs text-zinc-400 uppercase tracking-wider">${type}</span>
-                <span class="${colorClass} text-lg">${sign}${change} <span class="text-xs font-normal text-zinc-500 align-middle ml-1">(+${data.add} / -${data.cut})</span></span>
-            </div>
-        `;
-    }
-    
-    container.innerHTML = html;
-    if (html) {
-         wrapper.classList.remove('hidden');
-    } else {
-         wrapper.classList.add('hidden');
-    }
+    queueManaFetch(['diff-remove', 'diff-add', 'diff-unchanged']);
 }
 
 // --- Deck Storage Logic ---
@@ -866,6 +812,8 @@ window.addEventListener('load', () => {
         if (select) select.value = savedGrouping;
     }
     
+    restoreSectionVisibility();
+    
     const d1 = localStorage.getItem('deck1');
     if (d1) {
         document.getElementById('deck1').value = d1;
@@ -885,6 +833,38 @@ function setGroupingMode(mode) {
     if (lastDiffResult) {
         calculateDiff();
     }
+}
+
+function toggleSectionCheckbox(sectionId, checkbox) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+    
+    if (checkbox.checked) {
+        section.classList.remove('hidden');
+    } else {
+        section.classList.add('hidden');
+    }
+    
+    localStorage.setItem(`mtg-diff-section-${sectionId}`, checkbox.checked ? 'visible' : 'hidden');
+}
+
+function restoreSectionVisibility() {
+    const sections = [
+        { id: 'section-remove', checkbox: 'show-removes' },
+        { id: 'section-unchanged', checkbox: 'show-unchanged' },
+        { id: 'section-add', checkbox: 'show-adds' }
+    ];
+    
+    sections.forEach(({ id, checkbox }) => {
+        const state = localStorage.getItem(`mtg-diff-section-${id}`);
+        const section = document.getElementById(id);
+        const checkboxEl = document.getElementById(checkbox);
+        
+        if (state === 'hidden' && section && checkboxEl) {
+            section.classList.add('hidden');
+            checkboxEl.checked = false;
+        }
+    });
 }
 
 function copyToClipboard(elementId, btnElement) {
