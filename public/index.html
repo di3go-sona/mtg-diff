@@ -74,7 +74,16 @@
             </div>
 
             <!-- Results -->
-            <div id="results" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div id="results" class="hidden">
+                <div class="flex items-center gap-4 mb-4">
+                    <label class="text-xs text-zinc-400 uppercase tracking-widest">group by:</label>
+                    <select id="grouping-select" onchange="setGroupingMode(this.value)" class="bg-zinc-900 border border-zinc-700 text-zinc-100 text-sm rounded px-3 py-1 focus:ring-1 focus:ring-violet-500 focus:border-violet-500 outline-none">
+                        <option value="none">name</option>
+                        <option value="category">category</option>
+                        <option value="cmc">cmc</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-zinc-900 p-6 rounded border border-zinc-700">
                     <div class="flex items-center justify-between border-b border-zinc-700 pb-2 mb-4">
                         <h3 class="text-xs font-bold text-red-400 uppercase tracking-widest">// removes</h3>
@@ -104,6 +113,7 @@
                         </div>
                     </div>
                     <div id="diff-add" class="text-sm space-y-1"></div>
+                </div>
                 </div>
             </div>
 

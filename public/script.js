@@ -1,7 +1,9 @@
 // Mana symbol helpers
 const cardDataCache = {};
 const cardTypeCache = {};
+const cardCmcCache = {};
 let lastDiffResult = null;
+let groupingMode = 'none';
 let fetchQueue = new Set();
 let fetchTimeout = null;
 
@@ -67,17 +69,17 @@ async function fetchManaData(cardNames, containers) {
                 data.data.forEach(card => {
                     // Handle split cards or normal cards
                     let mana = card.mana_cost;
+                    let type = card.type_line;
+                    let cmc = card.cmc;
                     if (!mana && card.card_faces && card.card_faces.length > 0) {
                         mana = card.card_faces[0].mana_cost;
                     }
-                    cardDataCache[card.name] = mana || '';
-
-                    // Capture Type Line
-                    let type = card.type_line;
                     if (!type && card.card_faces && card.card_faces.length > 0) {
                         type = card.card_faces[0].type_line;
                     }
+                    cardDataCache[card.name] = mana || '';
                     cardTypeCache[card.name] = type || '';
+                    cardCmcCache[card.name] = cmc !== undefined ? cmc : 0;
                 });
             }
             // Mark not founds as empty string to prevent refetch
@@ -85,6 +87,7 @@ async function fetchManaData(cardNames, containers) {
                 data.not_found.forEach(item => {
                     cardDataCache[item.name] = '';
                     cardTypeCache[item.name] = '';
+                    cardCmcCache[item.name] = 0;
                 });
             }
         } catch (e) {
@@ -247,6 +250,65 @@ function renderCard(item, type) {
     </div>`;
 }
 
+function getType(typeLine) {
+    if (typeLine === undefined) return 'Unknown'; 
+    if (!typeLine) return 'Other';
+    if (typeLine.includes('Land')) return 'Land';
+    if (typeLine.includes('Creature')) return 'Creature';
+    if (typeLine.includes('Planeswalker')) return 'Planeswalker';
+    if (typeLine.includes('Instant')) return 'Instant';
+    if (typeLine.includes('Sorcery')) return 'Sorcery';
+    if (typeLine.includes('Enchantment')) return 'Enchantment'; 
+    if (typeLine.includes('Artifact')) return 'Artifact'; 
+    if (typeLine.includes('Battle')) return 'Battle';
+    return 'Other';
+}
+
+function groupByCategory(items) {
+    const groups = {};
+    const order = ['Land', 'Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Battle', 'Other', 'Unknown'];
+    
+    items.forEach(item => {
+        const type = getType(cardTypeCache[item.name]);
+        if (!groups[type]) groups[type] = [];
+        groups[type].push(item);
+    });
+    
+    return order.filter(t => groups[t]).map(t => ({ label: t, items: groups[t] }));
+}
+
+function groupByCmc(items) {
+    const groups = {};
+    
+    items.forEach(item => {
+        const cmc = cardCmcCache[item.name] !== undefined ? Math.round(cardCmcCache[item.name]) : 0;
+        const key = cmc.toString();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+    });
+    
+    const sortedKeys = Object.keys(groups).map(Number).sort((a, b) => a - b);
+    return sortedKeys.map(k => ({ label: k === 0 ? '0' : k.toString(), items: groups[k.toString()] }));
+}
+
+function renderGroupedCards(items, type) {
+    if (groupingMode === 'none') {
+        return items.sort((a, b) => a.name.localeCompare(b.name)).map(i => renderCard(i, type)).join('');
+    }
+    
+    const groups = groupingMode === 'category' ? groupByCategory(items) : groupByCmc(items);
+    
+    return groups.map(group => {
+        const sortedItems = group.items.sort((a, b) => a.name.localeCompare(b.name));
+        const cardsHtml = sortedItems.map(i => renderCard(i, type)).join('');
+        const label = groupingMode === 'cmc' ? `CMC ${group.label}` : group.label;
+        return `<div class="mb-3">
+            <div class="text-xs text-zinc-500 uppercase tracking-wider mb-1 ml-2">${label}</div>
+            ${cardsHtml}
+        </div>`;
+    }).join('');
+}
+
 function calculateDiff() {
     const deck1Text = document.getElementById('deck1').value;
     const deck2Text = document.getElementById('deck2').value;
@@ -271,15 +333,11 @@ function calculateDiff() {
     let removeHTML = '';
     if (mainDiff.cuts.length > 0) {
         removeHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
-        mainDiff.cuts.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
-            removeHTML += renderCard(i, 'remove');
-        });
+        removeHTML += renderGroupedCards(mainDiff.cuts, 'remove');
     }
     if (sideDiff.cuts.length > 0) {
         removeHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
-        sideDiff.cuts.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
-            removeHTML += renderCard(i, 'remove');
-        });
+        removeHTML += renderGroupedCards(sideDiff.cuts, 'remove');
     }
     if (!removeHTML) removeHTML = '<div class="text-zinc-500 italic">No cards removed</div>';
     removeContainer.innerHTML = removeHTML;
@@ -288,15 +346,11 @@ function calculateDiff() {
     let addHTML = '';
     if (mainDiff.adds.length > 0) {
         addHTML += `<div class="font-bold text-zinc-400 mb-2">Mainboard</div>`;
-        mainDiff.adds.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
-            addHTML += renderCard(i, 'add');
-        });
+        addHTML += renderGroupedCards(mainDiff.adds, 'add');
     }
     if (sideDiff.adds.length > 0) {
         addHTML += `<div class="font-bold text-zinc-400 mb-2 mt-4">Sideboard</div>`;
-        sideDiff.adds.sort((a,b) => a.name.localeCompare(b.name)).forEach(i => {
-            addHTML += renderCard(i, 'add');
-        });
+        addHTML += renderGroupedCards(sideDiff.adds, 'add');
     }
     if (!addHTML) addHTML = '<div class="text-zinc-500 italic">No cards added</div>';
     addContainer.innerHTML = addHTML;
@@ -328,23 +382,7 @@ function updateTypeStatsDisplay() {
     if (!lastDiffResult) return;
     
     const { mainDiff } = lastDiffResult;
-    // Only processing Mainboard stats for clarity
     
-    // Priority-based type detection
-    const getType = (typeLine) => {
-        if (typeLine === undefined) return 'Unknown'; 
-        if (!typeLine) return 'Other';
-        if (typeLine.includes('Land')) return 'Land';
-        if (typeLine.includes('Creature')) return 'Creature';
-        if (typeLine.includes('Planeswalker')) return 'Planeswalker';
-        if (typeLine.includes('Instant')) return 'Instant';
-        if (typeLine.includes('Sorcery')) return 'Sorcery';
-        if (typeLine.includes('Enchantment')) return 'Enchantment'; 
-        if (typeLine.includes('Artifact')) return 'Artifact'; 
-        if (typeLine.includes('Battle')) return 'Battle';
-        return 'Other';
-    };
-
     const stats = {};
     const initStat = (t) => { if (!stats[t]) stats[t] = { add: 0, cut: 0 }; };
 
@@ -821,7 +859,13 @@ document.addEventListener('mouseout', (e) => {
 
 // Initialize from localStorage
 window.addEventListener('load', () => {
-    // Restore Saved Content
+    const savedGrouping = localStorage.getItem('mtg-diff-grouping');
+    if (savedGrouping && ['none', 'category', 'cmc'].includes(savedGrouping)) {
+        groupingMode = savedGrouping;
+        const select = document.getElementById('grouping-select');
+        if (select) select.value = savedGrouping;
+    }
+    
     const d1 = localStorage.getItem('deck1');
     if (d1) {
         document.getElementById('deck1').value = d1;
@@ -834,6 +878,14 @@ window.addEventListener('load', () => {
         updatePreview('deck2', 'preview2');
     }
 });
+
+function setGroupingMode(mode) {
+    groupingMode = mode;
+    localStorage.setItem('mtg-diff-grouping', mode);
+    if (lastDiffResult) {
+        calculateDiff();
+    }
+}
 
 function copyToClipboard(elementId, btnElement) {
     const container = document.getElementById(elementId);
